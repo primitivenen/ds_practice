@@ -1,0 +1,193 @@
+附上一个有用的关于怎样translate SQL queries into Python pandas的帖子
+https://medium.com/jbennetcodes/how-to-rewrite-your-sql-queries-in-pandas-and-more-149d341fc53e
+
+Q1
+Problem:  Member can make purchase via either mobile  or desktop platform. Using the following data table to determine the total number of member and revenue for mobile-only, desktop_only and mobile_desktop.. 1point3acres
+The input spending table is
+member_id    date    channel   spend
+1001    1/1/2018    mobile    100
+1001    1/1/2018    desktop    100-baidu 1point3acres
+1002    1/1/2018    mobile    100
+1002    1/2/2018    mobile    100
+1003    1/1/2018    desktop    100. check 1point3acres for more.
+1003    1/2/2018    desktop    100
+
+The output data is
+date    channel    total_spend    total_members
+1/1/2018    desktop    100    1
+1/1/2018    mobile    100    1
+1/1/2018    both    200    1-google 1point3acres
+1/2/2018    desktop    100    1
+1/2/2018    mobile    100    1
+1/2/2018    both    0    0
+
+
+SQL solution:
+
+1.
+
+CREATE VIEW member_spend AS
+SELECT
+date,
+member_id,
+SUM(CASE WHEN channel == ‘mobile’ THEN spend ELSE 0 END) AS mobile_spend,
+SUM(CASE WHEN channel == ‘desktop’ THEN spend ELSE 0 END) AS desktop_spend
+FROM
+spending . From 1point 3acres bbs
+GROUP BY date, member_id;
+
+
+SELECT
+date,. 1point3acres
+CASE WHEN mobile_spend > 0 AND desktop_spend = 0 THEN ‘mobile’
+         WHEN mobile_spend = 0 AND desktop_spend > 0 THEN ‘desktop’
+         WHEN mobile_spend > 0 AND desktop_spend > 0 THEN ‘both’
+         END AS channel,
+SUM(mobile_spend + desktop_spend) AS total_spend,
+COUNT(*) AS total_members
+FROM member_spend
+GROUP BY
+date,
+CASE WHEN mobile_spend > 0 AND desktop_spend = 0 THEN ‘mobile’
+         WHEN mobile_spend = 0 AND desktop_spend > 0 THEN ‘desktop’
+         WHEN mobile_spend > 0 AND desktop_spend > 0 THEN ‘both’
+         END
+;
+
+
+Python pandas:
+
+spending[‘mobile_spend’] = spending[spending.channel == ‘mobile’].spend
+spending[‘desktop_spend’] = spending[spending.channel == ‘desktop’].spend
+member_spend = spending.group_by([‘date’, ‘member_id’]).sum([‘mobile_spend’, ‘desktop_spend’]).to_frame([‘mobile_spend’, ‘desktop_spend’].reset_index()
+
+
+
+SQL
+
+SELECT . From 1point 3acres bbs
+date,
+CASE WHEN mobile_spend > 0 AND desktop_spend = 0 THEN ‘mobile’
+         WHEN mobile_spend = 0 AND desktop_spend > 0 THEN ‘desktop’
+         WHEN mobile_spend > 0 AND desktop_spend > 0 THEN ‘both’
+         END AS channel,
+SUM(mobile_spend + desktop_spend) AS total_spend,
+COUNT(*) AS total_members
+FROM member_spend
+GROUP BY
+date,
+CASE WHEN mobile_spend > 0 AND desktop_spend = 0 THEN ‘mobile’
+         WHEN mobile_spend = 0 AND desktop_spend > 0 THEN ‘desktop’
+         WHEN mobile_spend > 0 AND desktop_spend > 0 THEN ‘both’
+         END
+;
+
+Python pandas
+
+member_spend[member_spend.mobile_spend>0 & member_spend.desktop_spend==0], ‘channel’] = ‘mobile’
+member_spend[member_spend.mobile_spend==0 & member_spend.desktop_spend>0], ‘channel’] = ‘desktop’
+member_spend[member_spend.mobile_spend>0 & member_spend.desktop_spend>0], ‘channel’] = ‘both’
+
+
+tot_members = member_spend.groupby([‘date’, ‘channel’]).size().to_frame(‘tot_members’).reset_index()
+tot_spend = member_spend.groupby([‘date’, ‘channel’].agg({‘mobile_spend’:sum, ‘desktop_spend’:sum}).to_frame([‘mobile_spend’, ‘desktop_spend’])
+tot_spend[‘tot_spend’] = tot_spend[‘mobile_spend’] + tot_spend[‘desktop_spend’]
+output = tot_members.concat(tot_spend[‘tot_spend’])
+
+
+R dplyr:
+
+output <- spending %>%
+  group_by(member_id, date)%>%
+  summarise(mobile_spend = sum(spend[channel == 'mobile']),
+            desktop_spend = sum(spend[channel == 'desktop'])) %>%
+  mutate(channel = ifelse((mobile_spend>0 & desktop_spend>0), 'both',
+                          ifelse(mobile_spend==0, 'desktop', 'mobile'))) %>%
+  group_by(date, channel)%>%
+  summarise(total_spend = mobile_spend + desktop_spend,
+                     total_member = n())
+
+
+Q2
+
+Problem: table member_id|company_name|year_start
+1): count members who ever moved from Microsoft to Google?
+
+2):  count members who directly moved from Microsoft to Google? (Microsoft -- Linkedin -- Google doesn't count)
+
+1) SQL solution:
+(assumption: no end date. define move from company A to company B if the start date of company B is after the start date of company A, Microsoft -- Linkedin -- Google count)
+
+
+SELECT
+COUNT(DISTINCT member_id) AS num_member
+FROM table t1
+JOIN table t2
+ON t1.member_id = t2.member_id
+WHERE t1.year_start < t2.year_start
+AND t1.company_name = ‘Microsoft’
+AND t2.company_name = ‘Google’
+;
+
+
+Python pandas:
+
+joined_table = table.merge(table, on =‘member_id’, how=’inner’, suffixes = (‘t1_’, ‘t2_’))
+Num_member = joined_table[(joined_table.t1_company_name == ‘Microsoft’) & (joined_table.t2_company_name == ‘Google’) & (joined_table.t1_year_start < joined_table.t2_year_start)].member_id.unique()
+
+2)
+SQL solution:. check 1point3acres for more.
+SELECT
+COUNT(DISTINCT member_id) AS num_member
+FROM
+(SELECT
+member_id,
+company_name,
+LEAD(company_name, 1) OVER (PARTITION BY member_id ORDER BY year_start) AS next_company
+FROM table
+) t
+WHERE
+Company_name = “Microsoft”
+AND next_company = “Google”
+;
+
+Python pandas:
+
+table[‘next_company’] = table.sort_values(by=[‘member_id’, ‘year_start’]).groupby([‘member_id’])[‘company_name’].shift(1)
+
+table[(table.company_name == ‘Microsoft’) & (table.next_company == ‘Google’)][‘member_id’].unique()
+
+Q3
+Problem
+member_id|email_address, suppose that every member has two email address, get the table in the format of . check 1point3acres for more.
+member_id | email1 | email2
+
+SQL solution:
+
+SELECT
+member_id,
+MAX(CASE WHEN email_rank = 1 THEN email_address ELSE NULL END) AS email1,
+MAX(CASE WHEN email_rank = 2 THEN email_address ELSE NULL END) AS email2
+FROM
+(SELECT
+member_id,
+email_address,
+ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY email_address) AS email_rank
+FROM table) t
+GROUP BY member_id;
+
+Python pandas:
+
+table[‘email_rank’] = table.groupby([‘member_id’])[‘email_address’].rank(method = ‘first’)
+
+Use groupby rank(method=’first’) to replace row_number() partition by in SQL.
+method=’min’ to replace Rank, method = ‘dense’to replace dense_rank()
+
+Output = table.pivot(index=’member_id’, columns=’email_rank’, values=’email_address’)
+
+
+补充内容 (2019-6-20 11:41):
+感谢xymxym指出的几个pandas的语法错误. Q1第一部分的pandas的最后一个语句应该改为member_spend = spending.groupby([‘date’, ‘member_id’]).sum()[[‘mobile_spend’, ‘desktop_spend’]].reset_index(). check 1point3acres for more.
+
+补充内容 (2019-6-20 11:43):
+SQL中的lead()对应的pandas应该是shift(-1)而不是shift(1); SQL中 COUNT（DISTINCT X）对应的pandas function应该是.nunique() 而不是.unique()
